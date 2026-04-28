@@ -1,5 +1,3 @@
-const express = require('express');
-const router = express.Router();
 const Assessment = require('../models/Assessment');
 
 const SITE_URL = 'https://nursfpx4015.com';
@@ -104,21 +102,29 @@ const today = () => new Date().toISOString().replace(/T.*/, '');
 
 const toISO = (d) => (d ? new Date(d).toISOString() : new Date().toISOString());
 
-// ── XSLT stylesheet endpoints ───────────────────────────────────────
+// ── XSLT stylesheet handlers ────────────────────────────────────────
 
-router.get('/sitemap-index.xsl', (_req, res) => {
+const indexXsl = (_req, res) => {
   res.set('Content-Type', 'application/xml; charset=UTF-8');
   res.send(INDEX_XSL);
-});
+};
 
-router.get('/sitemap-urlset.xsl', (_req, res) => {
+const urlsetXsl = (_req, res) => {
   res.set('Content-Type', 'application/xml; charset=UTF-8');
   res.send(URLSET_XSL);
-});
+};
 
 // ── Sitemap Index (/sitemap.xml) ─────────────────────────────────────
 
-router.get('/sitemap.xml', async (_req, res) => {
+const STATIC_PAGES = [
+  { loc: '/' },
+  { loc: '/about' },
+  { loc: '/contact' },
+  { loc: '/reviews' },
+  { loc: '/free-samples' },
+];
+
+const index = async (_req, res) => {
   try {
     const assessments = await Assessment.find(
       { slug: { $exists: true, $ne: '' } },
@@ -148,19 +154,11 @@ router.get('/sitemap.xml', async (_req, res) => {
     console.error('Sitemap index error:', error);
     res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></sitemapindex>');
   }
-});
+};
 
 // ── Page Sitemap (/page-sitemap.xml) ─────────────────────────────────
 
-const STATIC_PAGES = [
-  { loc: '/' },
-  { loc: '/about' },
-  { loc: '/contact' },
-  { loc: '/reviews' },
-  { loc: '/free-samples' },
-];
-
-router.get('/page-sitemap.xml', (_req, res) => {
+const pages = (_req, res) => {
   const d = today();
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
   xml += '<?xml-stylesheet type="text/xsl" href="/sitemap-urlset.xsl"?>\n';
@@ -175,11 +173,11 @@ router.get('/page-sitemap.xml', (_req, res) => {
 
   xml += '</urlset>';
   sendXml(res, xml);
-});
+};
 
 // ── Post / Assessment Sitemap (/post-sitemap.xml) ────────────────────
 
-router.get('/post-sitemap.xml', async (_req, res) => {
+const posts = async (_req, res) => {
   try {
     const assessments = await Assessment.find(
       { slug: { $exists: true, $ne: '' } },
@@ -204,6 +202,6 @@ router.get('/post-sitemap.xml', async (_req, res) => {
     console.error('Post sitemap error:', error);
     res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
   }
-});
+};
 
-module.exports = router;
+module.exports = { index, pages, posts, indexXsl, urlsetXsl };
