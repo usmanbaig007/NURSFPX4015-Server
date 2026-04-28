@@ -61,4 +61,33 @@ const deleteReview = async (req, res) => {
   }
 };
 
-module.exports = { getReviews, createReview, approveReview, deleteReview };
+const createAdminReview = async (req, res) => {
+  try {
+    const { studentName, rating, comment, course, source, isApproved } = req.body;
+    const review = await Review.create({ studentName, rating, comment, course, source, isApproved: isApproved === true });
+    res.status(201).json({ success: true, data: review });
+  } catch (error) {
+    console.error('Create admin review error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+const updateReview = async (req, res) => {
+  try {
+    const { studentName, rating, comment, course, source, isApproved } = req.body;
+    const review = await Review.findByIdAndUpdate(
+      req.params.id,
+      { studentName, rating, comment, course, source, isApproved: isApproved === true },
+      { new: true }
+    );
+    if (!review) {
+      return res.status(404).json({ success: false, message: 'Review not found' });
+    }
+    res.json({ success: true, data: review });
+  } catch (error) {
+    console.error('Update review error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+module.exports = { getReviews, createReview, createAdminReview, updateReview, approveReview, deleteReview };

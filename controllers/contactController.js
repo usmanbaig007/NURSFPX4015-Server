@@ -1,10 +1,19 @@
 const { body, validationResult } = require('express-validator');
 const ContactSubmission = require('../models/ContactSubmission');
 
+const US_PHONE_REGEX = /^(?:\+1\s?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}$/;
+
 const validateContact = [
   body('fullName').trim().notEmpty().withMessage('Full name is required'),
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
-  body('phone').optional().trim(),
+  body('phone')
+    .optional({ checkFalsy: true })
+    .trim()
+    .custom((value, { req }) => {
+      if ((req.body.source || '').trim() !== 'popup') return true;
+      return US_PHONE_REGEX.test(value);
+    })
+    .withMessage('Popup form accepts only US phone numbers (e.g., (555) 123-4567)'),
   body('subject').optional().trim(),
   body('message').optional().trim(),
   body('source').optional().trim(),
@@ -39,9 +48,12 @@ const submitContact = async (req, res) => {
 
 const getSubmissions = async (req, res) => {
   try {
-    const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(50, parseInt(req.query.limit) || 20);
+    const pageQuery = parseInt(req.query.page);
+    const limitQuery = parseInt(req.query.limit);
+    const page = isNaN(pageQuery) || pageQuery < 1 ? 1 : pageQuery;
+    const limit = isNaN(limitQuery) || limitQuery < 1 ? 20 : Math.min(limitQuery, 50);
     const skip = (page - 1) * limit;
+
     const filter = {};
     if (req.query.unread === 'true') filter.isRead = false;
 
@@ -50,7 +62,7 @@ const getSubmissions = async (req, res) => {
       ContactSubmission.countDocuments(filter),
     ]);
 
-    res.json({
+    return res.status(200).json({
       success: true,
       data: submissions,
       total,
@@ -59,7 +71,7 @@ const getSubmissions = async (req, res) => {
     });
   } catch (error) {
     console.error('Get submissions error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
 };
 

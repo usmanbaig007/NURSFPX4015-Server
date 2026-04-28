@@ -29,8 +29,8 @@ const DEFAULTS = {
     sectionHeading: "We're Here to Help",
     paragraph:
       'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
-    phone: '+1 (234) 567-8900',
-    email: 'help@nursfpx4015.com',
+    phone: '+1(612)208-2686',
+    email: 'contact@nursfpx4015.com',
   },
   'form-config': {
     popupHeading: 'Get 30% Off Your First Online Class Help!',

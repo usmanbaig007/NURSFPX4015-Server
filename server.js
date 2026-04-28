@@ -29,6 +29,16 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', env: process.env.NODE_ENV }));
 
+// Dynamic sitemaps (index + sub-sitemaps + XSL stylesheets)
+const sitemapRouter = require('./routes/sitemap');
+app.use(async (req, _res, next) => {
+  if (req.path.includes('sitemap') || req.path.includes('.xsl')) {
+    try { await connectDB(); } catch (e) { return next(e); }
+  }
+  next();
+});
+app.use('/', sitemapRouter);
+
 // Ensure MongoDB is connected before API handlers run.
 app.use('/api', async (_req, res, next) => {
   try {

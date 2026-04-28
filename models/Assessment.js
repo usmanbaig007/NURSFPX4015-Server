@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const assessmentSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
-    description: { type: String, required: true },
+    slug: { type: String, trim: true, lowercase: true, unique: true, sparse: true },
     content: { type: String, default: '' },
     degree: { type: String, required: true, trim: true }, // e.g. BSN, MSN, DNP
     className: { type: String, required: true, trim: true }, // e.g. NURS-FPX4015
@@ -19,6 +19,6 @@ const assessmentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-assessmentSchema.index({ title: 'text', description: 'text', className: 'text' });
+assessmentSchema.index({ title: 'text', content: 'text', className: 'text' });
 
 module.exports = mongoose.model('Assessment', assessmentSchema);

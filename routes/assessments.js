@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
   getAssessments,
-  getAssessmentById,
+  getAssessmentByIdentifier,
   searchAssessments,
   getDegreeStructure,
   createAssessment,
@@ -15,7 +15,7 @@ const { upload } = require('../config/cloudinary');
 router.get('/search', searchAssessments);
 router.get('/structure', getDegreeStructure);
 router.get('/', getAssessments);
-router.get('/:id', getAssessmentById);
+router.get('/:id', getAssessmentByIdentifier);
 router.post(
   '/',
   protect,
@@ -25,7 +25,15 @@ router.post(
   ]),
   createAssessment
 );
-router.put('/:id', protect, updateAssessment);
+router.put(
+  '/:id',
+  protect,
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'file', maxCount: 1 },
+  ]),
+  updateAssessment
+);
 router.delete('/:id', protect, deleteAssessment);
 
 module.exports = router;

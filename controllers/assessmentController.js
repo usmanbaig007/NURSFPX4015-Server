@@ -1,5 +1,89 @@
 const Assessment = require('../models/Assessment');
+const mongoose = require('mongoose');
 const { cloudinary } = require('../config/cloudinary');
+
+const normalizeAssessmentPayload = (payload = {}) => {
+  const data = { ...payload };
+
+  // Description is deprecated and should not be persisted anymore.
+  delete data.description;
+  delete data.slug;
+
+  if (typeof data.tags === 'string') {
+    data.tags = data.tags.split(',').map((t) => t.trim()).filter(Boolean);
+  }
+
+  ['isFeatured', 'isNursfpx4015'].forEach((key) => {
+    if (typeof data[key] === 'string') {
+      data[key] = data[key] === 'true';
+    }
+  });
+
+  return data;
+};
+
+const LEGACY_ASSESSMENT_ID_SUFFIX_REGEX = /-[a-f0-9]{24}$/i;
+
+const slugifyAssessmentTitle = (title = '') => {
+  const slug = String(title)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+
+  return slug || 'assessment';
+};
+
+const sanitizeIncomingSlug = (slug = '') => {
+  return String(slug || '')
+    .trim()
+    .toLowerCase()
+    .replace(LEGACY_ASSESSMENT_ID_SUFFIX_REGEX, '')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+};
+
+const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildTitleRegexFromSlug = (slug = '') => {
+  const tokens = sanitizeIncomingSlug(slug).split('-').filter(Boolean);
+  if (!tokens.length) return null;
+
+  return new RegExp(`^\\s*${tokens.map(escapeRegex).join('[^a-zA-Z0-9]+')}\\s*$`, 'i');
+};
+
+const generateUniqueSlug = async (title, excludeId = null) => {
+  const baseSlug = slugifyAssessmentTitle(title);
+  let candidate = baseSlug;
+  let counter = 2;
+  const filter = excludeId ? { _id: { $ne: excludeId } } : {};
+
+  while (await Assessment.exists({ slug: candidate, ...filter })) {
+    candidate = `${baseSlug}-${counter}`;
+    counter += 1;
+  }
+
+  return candidate;
+};
+
+const ensureAssessmentSlug = async (assessment) => {
+  if (!assessment) return assessment;
+  if (assessment.slug) return assessment;
+
+  assessment.slug = await generateUniqueSlug(assessment.title, assessment._id);
+  await assessment.save();
+
+  return assessment;
+};
+
+const ensureAssessmentSlugs = async (assessments = []) => {
+  await Promise.all(assessments.map((assessment) => ensureAssessmentSlug(assessment)));
+  return assessments;
+};
 
 const getAssessments = async (req, res) => {
   try {
@@ -18,6 +102,8 @@ const getAssessments = async (req, res) => {
       Assessment.countDocuments(query),
     ]);
 
+    await ensureAssessmentSlugs(assessments);
+
     res.json({
       success: true,
       data: assessments,
@@ -31,12 +117,33 @@ const getAssessments = async (req, res) => {
   }
 };
 
-const getAssessmentById = async (req, res) => {
+const getAssessmentByIdentifier = async (req, res) => {
   try {
-    const assessment = await Assessment.findById(req.params.id);
+    const rawIdentifier = String(req.params.id || '').trim();
+    const sanitizedSlug = sanitizeIncomingSlug(rawIdentifier);
+    let assessment = null;
+
+    if (mongoose.isValidObjectId(rawIdentifier)) {
+      assessment = await Assessment.findById(rawIdentifier);
+    }
+
+    if (!assessment && sanitizedSlug) {
+      assessment = await Assessment.findOne({ slug: sanitizedSlug });
+    }
+
+    if (!assessment && sanitizedSlug) {
+      const titleRegex = buildTitleRegexFromSlug(sanitizedSlug);
+      if (titleRegex) {
+        assessment = await Assessment.findOne({ title: titleRegex });
+      }
+    }
+
     if (!assessment) {
       return res.status(404).json({ success: false, message: 'Assessment not found' });
     }
+
+    await ensureAssessmentSlug(assessment);
+
     res.json({ success: true, data: assessment });
   } catch (error) {
     console.error('Get assessment error:', error);
@@ -55,12 +162,14 @@ const searchAssessments = async (req, res) => {
     const assessments = await Assessment.find({
       $or: [
         { title: regex },
-        { description: regex },
+        { content: regex },
         { className: regex },
         { degree: regex },
         { tags: { $in: [regex] } },
       ],
     }).limit(20);
+
+    await ensureAssessmentSlugs(assessments);
 
     res.json({ success: true, data: assessments, total: assessments.length });
   } catch (error) {
@@ -97,7 +206,14 @@ const getDegreeStructure = async (req, res) => {
 
 const createAssessment = async (req, res) => {
   try {
-    const data = { ...req.body };
+    const data = normalizeAssessmentPayload(req.body);
+
+    if (!data.title || !String(data.title).trim()) {
+      return res.status(400).json({ success: false, message: 'Title is required' });
+    }
+
+    data.slug = await generateUniqueSlug(data.title);
+
     if (req.files?.image?.[0]) {
       data.imageUrl = req.files.image[0].path;
       data.imagePublicId = req.files.image[0].filename;
@@ -106,9 +222,7 @@ const createAssessment = async (req, res) => {
       data.fileUrl = req.files.file[0].path;
       data.filePublicId = req.files.file[0].filename;
     }
-    if (data.tags && typeof data.tags === 'string') {
-      data.tags = data.tags.split(',').map((t) => t.trim()).filter(Boolean);
-    }
+
     const assessment = await Assessment.create(data);
     res.status(201).json({ success: true, data: assessment });
   } catch (error) {
@@ -119,17 +233,38 @@ const createAssessment = async (req, res) => {
 
 const updateAssessment = async (req, res) => {
   try {
-    const data = { ...req.body };
-    if (data.tags && typeof data.tags === 'string') {
-      data.tags = data.tags.split(',').map((t) => t.trim()).filter(Boolean);
-    }
-    const assessment = await Assessment.findByIdAndUpdate(req.params.id, data, {
-      new: true,
-      runValidators: true,
-    });
+    const assessment = await Assessment.findById(req.params.id);
     if (!assessment) {
       return res.status(404).json({ success: false, message: 'Assessment not found' });
     }
+
+    const data = normalizeAssessmentPayload(req.body);
+    const incomingTitle = typeof data.title === 'string' ? data.title.trim() : '';
+    const titleChanged = Boolean(incomingTitle) && incomingTitle !== assessment.title;
+
+    if (!assessment.slug || titleChanged) {
+      data.slug = await generateUniqueSlug(incomingTitle || assessment.title, assessment._id);
+    }
+
+    if (req.files?.image?.[0]) {
+      if (assessment.imagePublicId) {
+        await cloudinary.uploader.destroy(assessment.imagePublicId);
+      }
+      data.imageUrl = req.files.image[0].path;
+      data.imagePublicId = req.files.image[0].filename;
+    }
+
+    if (req.files?.file?.[0]) {
+      if (assessment.filePublicId) {
+        await cloudinary.uploader.destroy(assessment.filePublicId, { resource_type: 'raw' });
+      }
+      data.fileUrl = req.files.file[0].path;
+      data.filePublicId = req.files.file[0].filename;
+    }
+
+    Object.assign(assessment, data);
+    await assessment.save();
+
     res.json({ success: true, data: assessment });
   } catch (error) {
     console.error('Update assessment error:', error);
@@ -159,7 +294,7 @@ const deleteAssessment = async (req, res) => {
 
 module.exports = {
   getAssessments,
-  getAssessmentById,
+  getAssessmentByIdentifier,
   searchAssessments,
   getDegreeStructure,
   createAssessment,
