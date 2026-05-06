@@ -59,6 +59,7 @@ app.use('/api/assessments', require('./routes/assessments'));
 app.use('/api/tutors', require('./routes/tutors'));
 app.use('/api/reviews', require('./routes/reviews'));
 app.use('/api/site-content', require('./routes/siteContent'));
+app.use('/api/pages', require('./routes/pages'));
 
 // Global error handler
 app.use((err, req, res, _next) => {
