@@ -1,4 +1,5 @@
 const Assessment = require('../models/Assessment');
+const Page = require('../models/Page');
 
 const SITE_URL = 'https://nursfpx4015.com';
 
@@ -158,21 +159,43 @@ const index = async (_req, res) => {
 
 // ── Page Sitemap (/page-sitemap.xml) ─────────────────────────────────
 
-const pages = (_req, res) => {
-  const d = today();
-  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-  xml += '<?xml-stylesheet type="text/xsl" href="/sitemap-urlset.xsl"?>\n';
-  xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
+const pages = async (_req, res) => {
+  try {
+    const d = today();
+    let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+    xml += '<?xml-stylesheet type="text/xsl" href="/sitemap-urlset.xsl"?>\n';
+    xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n';
 
-  for (const page of STATIC_PAGES) {
-    xml += '  <url>\n';
-    xml += `    <loc>${SITE_URL}${page.loc}</loc>\n`;
-    xml += `    <lastmod>${d}</lastmod>\n`;
-    xml += '  </url>\n';
+    for (const page of STATIC_PAGES) {
+      xml += '  <url>\n';
+      xml += `    <loc>${SITE_URL}${page.loc}</loc>\n`;
+      xml += `    <lastmod>${d}</lastmod>\n`;
+      xml += '  </url>\n';
+    }
+
+    // Add dynamically created custom pages
+    const customPages = await Page.find({}, { slug: 1, parent: 1, updatedAt: 1 }).lean();
+    for (const page of customPages) {
+      const lastmod = page.updatedAt ? new Date(page.updatedAt).toISOString().replace(/T.*/, '') : d;
+      let loc = '';
+      if (!page.parent || page.parent === 'custom') {
+        loc = `/${page.slug}`;
+      } else {
+        loc = `/${page.parent}/${page.slug}`;
+      }
+
+      xml += '  <url>\n';
+      xml += `    <loc>${SITE_URL}${loc}</loc>\n`;
+      xml += `    <lastmod>${lastmod}</lastmod>\n`;
+      xml += '  </url>\n';
+    }
+
+    xml += '</urlset>';
+    sendXml(res, xml);
+  } catch (error) {
+    console.error('Page sitemap error:', error);
+    res.status(500).send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>');
   }
-
-  xml += '</urlset>';
-  sendXml(res, xml);
 };
 
 // ── Post / Assessment Sitemap (/post-sitemap.xml) ────────────────────
