@@ -23,12 +23,14 @@ const getAllTutors = async (req, res) => {
 
 const createTutor = async (req, res) => {
   try {
-    const data = { ...req.body };
-    if (req.file) {
-      data.imageUrl = req.file.path;
-      data.imagePublicId = req.file.filename;
-    }
-    const tutor = await Tutor.create(data);
+    const { name, credentials, specialty, bio, order, isActive, imageUrl, imagePublicId } = req.body;
+    const tutor = await Tutor.create({
+      name, credentials, specialty, bio,
+      order: order || 0,
+      isActive: isActive !== 'false' && isActive !== false,
+      imageUrl: imageUrl || '',
+      imagePublicId: imagePublicId || '',
+    });
     res.status(201).json({ success: true, data: tutor });
   } catch (error) {
     console.error('Create tutor error:', error);
@@ -38,17 +40,18 @@ const createTutor = async (req, res) => {
 
 const updateTutor = async (req, res) => {
   try {
-    const data = { ...req.body };
+    const { name, credentials, specialty, bio, order, isActive, imageUrl, imagePublicId } = req.body;
 
-    // Handle new image upload
-    if (req.file) {
-      // Delete old image from Cloudinary if it exists
+    const data = { name, credentials, specialty, bio, order, isActive };
+
+    // If a new image URL is provided, update it and destroy the old one
+    if (imageUrl) {
       const existing = await Tutor.findById(req.params.id);
-      if (existing && existing.imagePublicId) {
+      if (existing && existing.imagePublicId && existing.imagePublicId !== imagePublicId) {
         await cloudinary.uploader.destroy(existing.imagePublicId).catch(() => {});
       }
-      data.imageUrl = req.file.path;
-      data.imagePublicId = req.file.filename;
+      data.imageUrl = imageUrl;
+      data.imagePublicId = imagePublicId || '';
     }
 
     const tutor = await Tutor.findByIdAndUpdate(req.params.id, data, {

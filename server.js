@@ -83,6 +83,32 @@ app.use('/api', async (_req, res, next) => {
   }
 });
 
+// Cloudinary direct-upload signature
+const { cloudinary: cloudinaryClient } = require('./config/cloudinary');
+app.post('/api/cloudinary-signature', require('./middleware/authMiddleware').protect, (req, res) => {
+  try {
+    const timestamp = Math.round(Date.now() / 1000);
+    const folder = 'nursfpx4015';
+    const signature = cloudinaryClient.utils.api_sign_request(
+      { timestamp, folder },
+      process.env.CLOUDINARY_API_SECRET
+    );
+    res.json({
+      success: true,
+      data: {
+        signature,
+        timestamp,
+        folder,
+        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+        apiKey: process.env.CLOUDINARY_API_KEY,
+      },
+    });
+  } catch (error) {
+    console.error('Cloudinary signature error:', error);
+    res.status(500).json({ success: false, message: 'Failed to generate upload signature' });
+  }
+});
+
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/contact', require('./routes/contact'));
