@@ -6,9 +6,39 @@ const connectDB = require('./config/db');
 const app = express();
 
 // CORS
-const allowedOrigins = process.env.CLIENT_URL
-  ? [process.env.CLIENT_URL]
-  : ['http://localhost:5173', 'http://localhost:3000'];
+const buildOrigins = () => {
+  if (!process.env.CLIENT_URL) return ['http://localhost:5173', 'http://localhost:3000'];
+  const origins = process.env.CLIENT_URL.split(',').map((s) => s.trim());
+  // Auto-add www / non-www variants
+  const withVariants = new Set(origins);
+  origins.forEach((o) => {
+    try {
+      const u = new URL(o);
+      if (u.hostname.startsWith('www.')) {
+        withVariants.add(o.replace('www.', ''));
+      } else {
+        withVariants.add(o.replace('://', '://www.'));
+      }
+    } catch { /* ignore malformed */ }
+  });
+  return [...withVariants];
+};
+
+const allowedOrigins = buildOrigins();
+
+// Handle preflight (OPTIONS) requests explicitly
+app.options('*', cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
 
 app.use(
   cors({
@@ -19,8 +49,9 @@ app.use(
         callback(new Error('Not allowed by CORS'));
       }
     },
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
 
