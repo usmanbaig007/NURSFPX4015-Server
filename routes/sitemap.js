@@ -123,6 +123,7 @@ const STATIC_PAGES = [
   { loc: '/contact' },
   { loc: '/reviews' },
   { loc: '/free-samples' },
+  { loc: '/faqs' },
 ];
 
 const index = async (_req, res) => {
