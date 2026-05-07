@@ -38,7 +38,20 @@ const createTutor = async (req, res) => {
 
 const updateTutor = async (req, res) => {
   try {
-    const tutor = await Tutor.findByIdAndUpdate(req.params.id, req.body, {
+    const data = { ...req.body };
+
+    // Handle new image upload
+    if (req.file) {
+      // Delete old image from Cloudinary if it exists
+      const existing = await Tutor.findById(req.params.id);
+      if (existing && existing.imagePublicId) {
+        await cloudinary.uploader.destroy(existing.imagePublicId).catch(() => {});
+      }
+      data.imageUrl = req.file.path;
+      data.imagePublicId = req.file.filename;
+    }
+
+    const tutor = await Tutor.findByIdAndUpdate(req.params.id, data, {
       new: true,
       runValidators: true,
     });

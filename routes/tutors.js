@@ -13,7 +13,7 @@ const { upload } = require('../config/cloudinary');
 router.get('/', getTutors);
 router.get('/all', protect, getAllTutors);
 router.post('/', protect, upload.single('image'), createTutor);
-router.put('/:id', protect, updateTutor);
+router.put('/:id', protect, upload.single('image'), updateTutor);
 router.delete('/:id', protect, deleteTutor);
 
 module.exports = router;
