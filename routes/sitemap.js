@@ -129,7 +129,7 @@ const STATIC_PAGES = [
 const index = async (_req, res) => {
   try {
     const assessments = await Assessment.find(
-      { slug: { $exists: true, $ne: '' } },
+      { slug: { $exists: true, $ne: '' }, status: { $ne: 'draft' } },
       { updatedAt: 1 }
     ).sort({ updatedAt: -1 }).limit(1).lean();
 
@@ -204,7 +204,7 @@ const pages = async (_req, res) => {
 const posts = async (_req, res) => {
   try {
     const assessments = await Assessment.find(
-      { slug: { $exists: true, $ne: '' } },
+      { slug: { $exists: true, $ne: '' }, status: { $ne: 'draft' } },
       { slug: 1, updatedAt: 1 }
     ).sort({ updatedAt: -1 }).lean();
 

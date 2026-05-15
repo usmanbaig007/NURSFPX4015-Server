@@ -13,6 +13,7 @@ const assessmentSchema = new mongoose.Schema(
     imagePublicId: { type: String, default: '' },
     isFeatured: { type: Boolean, default: false },
     isNursfpx4015: { type: Boolean, default: false },
+    status: { type: String, enum: ['published', 'draft'], default: 'published' },
     tags: [{ type: String }],
     downloadCount: { type: Number, default: 0 },
   },

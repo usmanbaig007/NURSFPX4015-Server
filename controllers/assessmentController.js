@@ -19,6 +19,11 @@ const normalizeAssessmentPayload = (payload = {}) => {
     }
   });
 
+  // Ensure status is a valid enum value
+  if (data.status && !['published', 'draft'].includes(data.status)) {
+    delete data.status;
+  }
+
   return data;
 };
 
@@ -88,7 +93,7 @@ const ensureAssessmentSlugs = async (assessments = []) => {
 const getAssessments = async (req, res) => {
   try {
     const { degree, className, featured, nursfpx4015, page = 1, limit = 12 } = req.query;
-    const query = {};
+    const query = { status: { $ne: 'draft' } }; // Public: only published
     if (degree) query.degree = new RegExp(`^${degree}$`, 'i');
     if (className) query.className = new RegExp(`^${className}$`, 'i');
     if (featured === 'true') query.isFeatured = true;
@@ -113,6 +118,46 @@ const getAssessments = async (req, res) => {
     });
   } catch (error) {
     console.error('Get assessments error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+// Admin: get all assessments with optional status filter
+const getAllAssessments = async (req, res) => {
+  try {
+    const { degree, className, featured, nursfpx4015, status, page = 1, limit = 12 } = req.query;
+    const query = {};
+    if (status && ['published', 'draft'].includes(status)) {
+      if (status === 'published') {
+        query.status = { $ne: 'draft' }; // Legacy docs without status field are considered published
+      } else {
+        query.status = status;
+      }
+    }
+    if (degree) query.degree = new RegExp(`^${degree}$`, 'i');
+    if (className) query.className = new RegExp(`^${className}$`, 'i');
+    if (featured === 'true') query.isFeatured = true;
+    if (nursfpx4015 === 'true') query.isNursfpx4015 = true;
+
+    const skip = (Math.max(1, parseInt(page)) - 1) * Math.min(50, parseInt(limit));
+    const lim = Math.min(50, parseInt(limit));
+
+    const [assessments, total] = await Promise.all([
+      Assessment.find(query).sort({ createdAt: -1 }).skip(skip).limit(lim),
+      Assessment.countDocuments(query),
+    ]);
+
+    await ensureAssessmentSlugs(assessments);
+
+    res.json({
+      success: true,
+      data: assessments,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / lim),
+    });
+  } catch (error) {
+    console.error('Get all assessments error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
@@ -142,6 +187,11 @@ const getAssessmentByIdentifier = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Assessment not found' });
     }
 
+    // Block draft assessments from public access
+    if (assessment.status === 'draft') {
+      return res.status(404).json({ success: false, message: 'Assessment not found' });
+    }
+
     await ensureAssessmentSlug(assessment);
 
     res.json({ success: true, data: assessment });
@@ -160,6 +210,7 @@ const searchAssessments = async (req, res) => {
 
     const regex = new RegExp(q.trim(), 'i');
     const assessments = await Assessment.find({
+      status: { $ne: 'draft' }, // Public: only published
       $or: [
         { title: regex },
         { content: regex },
@@ -181,6 +232,7 @@ const searchAssessments = async (req, res) => {
 const getDegreeStructure = async (req, res) => {
   try {
     const structure = await Assessment.aggregate([
+      { $match: { status: { $ne: 'draft' } } }, // Only published in sidebar
       {
         $group: {
           _id: { degree: '$degree', className: '$className' },
@@ -200,6 +252,31 @@ const getDegreeStructure = async (req, res) => {
     res.json({ success: true, data: structure });
   } catch (error) {
     console.error('Degree structure error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+const getRandomAssessments = async (req, res) => {
+  try {
+    const { degree, limit = 3 } = req.query;
+    const lim = Math.max(1, Math.min(20, parseInt(limit)));
+    
+    const matchStage = { status: { $ne: 'draft' } };
+    if (degree) {
+      matchStage.degree = new RegExp(`^${degree}$`, 'i');
+    }
+
+    const randomDocs = await Assessment.aggregate([
+      { $match: matchStage },
+      { $sample: { size: lim } }
+    ]);
+
+    const assessments = randomDocs.map(doc => Assessment.hydrate(doc));
+    await ensureAssessmentSlugs(assessments);
+
+    res.json({ success: true, data: assessments });
+  } catch (error) {
+    console.error('Get random assessments error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
@@ -294,9 +371,11 @@ const deleteAssessment = async (req, res) => {
 
 module.exports = {
   getAssessments,
+  getAllAssessments,
   getAssessmentByIdentifier,
   searchAssessments,
   getDegreeStructure,
+  getRandomAssessments,
   createAssessment,
   updateAssessment,
   deleteAssessment,
